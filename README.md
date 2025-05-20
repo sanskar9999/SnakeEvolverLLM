@@ -2,6 +2,8 @@
 
 Evolve and battle Snake AIs in this "King of the Hill" platform. Features a web viewer (Pyodide) for AI tournaments and a local Python framework with LLM (Groq) powered challenger generation.
 
+https://www.youtube.com/watch?v=eHycx1uYF8c
+ 
 ## Overview
 
 This project provides a "King of the Hill" style competition framework for Snake game AIs. It consists of two main parts:
