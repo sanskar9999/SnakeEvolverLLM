@@ -1,16 +1,3 @@
-Okay, this is a neat project with two distinct but related parts! Here's a good short description and a comprehensive README for your "Snake AI King of the Hill."
-
----
-
-### Short Description (for GitHub repo, etc.)
-
-Evolve and battle Snake AIs in this "King of the Hill" platform. Features a web viewer (Pyodide) for AI tournaments and a local Python framework with LLM (Groq) powered challenger generation.
-
----
-
-### README.md
-
-```markdown
 # Snake AI: King of the Hill
 
 Evolve and battle Snake AIs in this "King of the Hill" platform. Features a web viewer (Pyodide) for AI tournaments and a local Python framework with LLM (Groq) powered challenger generation.
@@ -232,7 +219,5 @@ Contributions, bug reports, and feature requests are welcome! Please open an iss
 
 ## License
 
-(Specify your license here, e.g., MIT License. If none, you can state "This project is currently unlicensed." or remove this section.)
-
 This project is currently unlicensed. Feel free to use it, but there are no explicit permissions granted for distribution or modification for other purposes.
-```
+
