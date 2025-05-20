@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snake AI Battles</title>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+            color: #333;
+        }
+        #gameContainer {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 20px;
+            border: 1px solid #ccc;
+            padding: 15px;
+            background-color: #fff;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        canvas {
+            border: 2px solid #333;
+            background-color: #fdfdfd;
+            margin-bottom: 15px;
+        }
+        #controls {
+            margin-bottom: 15px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        button {
+            padding: 10px 15px;
+            font-size: 16px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        #status, #scores, #aiNames {
+            margin-top: 5px;
+            font-size: 1em;
+            text-align: center;
+        }
+        #aiNames span {
+            padding: 3px 6px;
+            border-radius: 3px;
+            color: white;
+        }
+        .snake1-name { background-color: #28a745; } /* Green */
+        .snake2-name { background-color: #dc3545; } /* Red */
+
+        #loadingStatus {
+            font-style: italic;
+            color: #555;
+        }
+        .error-message {
+            color: red;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Snake AI Battles</h1>
+    <div id="gameContainer">
+        <div id="controls">
+            <button id="startBattleBtn">Start Random Battle</button>
+        </div>
+        <div id="aiNames">Player 1: --- vs Player 2: ---</div>
+        <div id="scores">Score: P1 (0) - P2 (0)</div>
+        <canvas id="gameCanvas"></canvas>
+        <div id="status">Welcome! Click "Start Random Battle" to begin.</div>
+        <div id="loadingStatus"></div>
+        <div id="errorMessage" class="error-message"></div>
+    </div>
+
+    <script type="module">
+        // --- Game Configuration ---
+        const GRID_WIDTH = 20;
+        const GRID_HEIGHT = 10;
+        const CELL_SIZE = 30; // pixels
+        const MAX_STEPS_PER_GAME = GRID_WIDTH * GRID_HEIGHT * 2.5; // Max steps before game ends in draw
+        const GAME_SPEED_MS = 100; // Milliseconds per game step
+
+        const SNAKE_1_COLOR = "#28a745"; // Green
+        const SNAKE_1_HEAD_COLOR = "#1e7e34";
+        const SNAKE_2_COLOR = "#dc3545"; // Red
+        const SNAKE_2_HEAD_COLOR = "#b21f2d";
+        const FOOD_COLOR = "#ffc107"; // Yellow
+        const GRID_COLOR = "#e0e0e0";
+
+        // --- Python Game Engine Code (to be run in Pyodide) ---
+        // IMPORTANT: Paste the content of your modified `snake_engine_for_web.py` here.
+        // This script should contain Food, Snake, SnakeEnvironment classes, and load_ai_function_from_string.
+        const PYTHON_ENGINE_CODE = `
+# PASTE YOUR MODIFIED PYTHON SNAKE ENGINE CODE HERE
+# (The one with Food, Snake, SnakeEnvironment, load_ai_function_from_string)
+# Example structure (ensure it's the full, correct code):
+#
+# from collections import deque
+# from dataclasses import dataclass
+# import random
+# # ... (rest of your Python imports and class definitions) ...
+#
+# @dataclass
+# class Food:
+#     position: tuple[int, int]
+#
+# class Snake:
+#     DIRECTIONS_MAP = [(0, -1), (1, 0), (0, 1), (-1, 0)] # UP, RIGHT, DOWN, LEFT
+#     ACTIONS_LIST = [0, 1, 2, 3]
+#     OPPOSITE_ACTIONS_MAP = {0: 2, 1: 3, 2: 0, 3: 1}
+#     # ... (full Snake class implementation) ...
+#     def __init__(self, x: int, y: int, initial_direction_idx = None,
+#                  grid_width: int = 20, grid_height: int = 10, initial_length: int = 3): # Added initial_length
+#         self.grid_width = grid_width
+#         self.grid_height = grid_height
+#         self.positions = deque()
+#         self.direction_idx = initial_direction_idx if initial_direction_idx is not None \
+#                              else random.choice(self.ACTIONS_LIST)
+#         self.length = initial_length # Use parameter
+#         self.score = 0
+#         self.is_alive = True
+#         self.name = "Snake"
+#
+#         head_pos = (x,y)
+#         self.positions.appendleft(head_pos)
+#        
+#         dx_segment_growth = -self.DIRECTIONS_MAP[self.direction_idx][0]
+#         dy_segment_growth = -self.DIRECTIONS_MAP[self.direction_idx][1]
+#
+#         current_segment_x, current_segment_y = head_pos
+#         for _ in range(1, self.length): # Use self.length
+#             next_segment_x = (current_segment_x + dx_segment_growth + self.grid_width) % self.grid_width
+#             next_segment_y = (current_segment_y + dy_segment_growth + self.grid_height) % self.grid_height
+#             if (next_segment_x, next_segment_y) in self.positions:
+#                 break
+#             self.positions.append((next_segment_x, next_segment_y))
+#             current_segment_x, current_segment_y = next_segment_x, next_segment_y
+#
+#     def get_head_position(self): # type: ignore
+#         return self.positions[0]
+#
+#     def get_current_direction_vector(self): # type: ignore
+#         return self.DIRECTIONS_MAP[self.direction_idx]
+#
+#     def get_valid_actions(self): # type: ignore
+#         if not self.is_alive: return []
+#         invalid_action = self.OPPOSITE_ACTIONS_MAP[self.direction_idx]
+#         return [a for a in self.ACTIONS_LIST if a != invalid_action]
+#
+#     def move(self, action_idx: int): # type: ignore
+#         if not self.is_alive: return False
+#         self.direction_idx = action_idx
+#         head_x, head_y = self.get_head_position()
+#         dx, dy = self.get_current_direction_vector()
+#         new_head = ((head_x + dx) % self.grid_width, (head_y + dy) % self.grid_height)
+#
+#         body_to_check = list(self.positions)
+#         if len(body_to_check) >= self.length:
+#             body_to_check = body_to_check[:-1]
+#        
+#         if new_head in body_to_check:
+#             self.is_alive = False
+#             return True
+#         self.positions.appendleft(new_head)
+#         if len(self.positions) > self.length:
+#             self.positions.pop()
+#         return False
+#
+#     def grow(self): # type: ignore
+#         if not self.is_alive: return
+#         # MAX_SNAKE_LENGTH needs to be defined or passed if used
+#         self.length = self.length + 1 
+#         self.score += 1
+#
+#     def to_dict(self): # type: ignore
+#         return {
+#             "positions": list(self.positions),
+#             "direction_idx": self.direction_idx,
+#             "length": self.length,
+#             "score": self.score,
+#             "is_alive": self.is_alive,
+#             "name": self.name,
+#             "grid_width": self.grid_width,
+#             "grid_height": self.grid_height
+#         }
+#
+# def load_ai_function_from_string(python_code_string: str, function_name: str = "get_challenger_action"):
+#     module_name = f"ai_module_{random.randint(10000, 99999)}"
+#     exec_globals = {"Snake": Snake, "Food": Food, "random": random, "deque": deque} # Ensure deque is available
+#     try:
+#         exec(python_code_string, exec_globals)
+#         ai_function = exec_globals.get(function_name)
+#         if callable(ai_function):
+#             return ai_function
+#         else:
+#             print(f"Error: Function '{function_name}' not found or not callable in loaded AI code.")
+#             return None
+#     except Exception as e:
+#         print(f"Error executing AI code string: {e}")
+#         return None
+#
+# class SnakeEnvironment:
+#     def __init__(self, grid_width: int, grid_height: int, max_steps: int,
+#                  ai1_logic: callable, ai2_logic: callable, # type: ignore
+#                  snake1_name: str = "P1", snake2_name: str = "P2", initial_snake_length: int = 3):
+#         self.grid_width = grid_width
+#         self.grid_height = grid_height
+#         self.max_steps = max_steps
+#         self.ai1_logic = ai1_logic
+#         self.ai2_logic = ai2_logic
+#         self.snake1_name_init = snake1_name
+#         self.snake2_name_init = snake2_name
+#         self.initial_snake_length = initial_snake_length # Store this
+#
+#         self.snake1 = None # type: ignore
+#         self.snake2 = None # type: ignore
+#         self.foods = [] # type: ignore
+#         self.game_over = False
+#         self.steps_taken = 0
+#         self.winner_message = ""
+#         self.reset()
+#
+#     def reset(self): # type: ignore
+#         self.steps_taken = 0
+#         self.game_over = False
+#         self.winner_message = ""
+#        
+#         s1_x, s1_y = self.grid_width // 4, self.grid_height // 2
+#         s1_dir = 1 # Right
+#         self.snake1 = Snake(s1_x, s1_y, initial_direction_idx=s1_dir, grid_width=self.grid_width, grid_height=self.grid_height, initial_length=self.initial_snake_length)
+#         self.snake1.name = self.snake1_name_init
+#
+#         s2_x, s2_y = self.grid_width * 3 // 4, self.grid_height // 2
+#         s2_dir = 3 # Left
+#         self.snake2 = Snake(s2_x, s2_y, initial_direction_idx=s2_dir, grid_width=self.grid_width, grid_height=self.grid_height, initial_length=self.initial_snake_length)
+#         self.snake2.name = self.snake2_name_init
+#
+#         # Basic check for immediate overlap (can be improved)
+#         if any(p in self.snake1.positions for p in self.snake2.positions):
+#             # Simple fallback: slightly adjust s2 if overlap
+#             self.snake2 = Snake(s2_x + 1, s2_y, initial_direction_idx=s2_dir, grid_width=self.grid_width, grid_height=self.grid_height, initial_length=self.initial_snake_length)
+#             self.snake2.name = self.snake2_name_init
+#
+#         self.foods = []
+#         self._spawn_food()
+#
+#     def _spawn_food(self): # type: ignore
+#         if len(self.foods) > 0: return
+#         occupied_cells = set()
+#         if self.snake1 and self.snake1.is_alive: occupied_cells.update(self.snake1.positions)
+#         if self.snake2 and self.snake2.is_alive: occupied_cells.update(self.snake2.positions)
+#        
+#         empty_cells = [(x, y) for x in range(self.grid_width) for y in range(self.grid_height) if (x,y) not in occupied_cells]
+#         if empty_cells:
+#             self.foods.append(Food(random.choice(empty_cells)))
+#
+#     def _get_actions_from_ais(self): # type: ignore
+#         action1, action2 = self.snake1.direction_idx, self.snake2.direction_idx
+#         current_foods_for_ai = list(self.foods)
+#
+#         if self.snake1.is_alive:
+#             valid_actions1 = self.snake1.get_valid_actions()
+#             if valid_actions1:
+#                 try:
+#                     act1_candidate = self.ai1_logic(self.snake1, self.snake2, current_foods_for_ai, self.grid_width, self.grid_height)
+#                     action1 = act1_candidate if act1_candidate in valid_actions1 else random.choice(valid_actions1)
+#                 except Exception as e:
+#                     print(f"Error in AI1 ({self.snake1.name}) logic: {e}")
+#                     action1 = random.choice(valid_actions1)
+#        
+#         if self.snake2.is_alive:
+#             valid_actions2 = self.snake2.get_valid_actions()
+#             if valid_actions2:
+#                 try:
+#                     act2_candidate = self.ai2_logic(self.snake2, self.snake1, current_foods_for_ai, self.grid_width, self.grid_height)
+#                     action2 = act2_candidate if act2_candidate in valid_actions2 else random.choice(valid_actions2)
+#                 except Exception as e:
+#                     print(f"Error in AI2 ({self.snake2.name}) logic: {e}")
+#                     action2 = random.choice(valid_actions2)
+#         return action1, action2
+#
+#     def run_step(self): # type: ignore
+#         if self.game_over:
+#             return self.get_state()
+#
+#         action1, action2 = self._get_actions_from_ais()
+#         self.steps_taken += 1
+#
+#         if self.snake1 and self.snake1.is_alive: self.snake1.move(action1)
+#         if self.snake2 and self.snake2.is_alive: self.snake2.move(action2)
+#
+#         s1_died_self = not self.snake1.is_alive
+#         s2_died_self = not self.snake2.is_alive
+#
+#         s1_killed_by_s2, s2_killed_by_s1 = False, False
+#
+#         if self.snake1.is_alive and self.snake2.is_alive:
+#             head1, head2 = self.snake1.get_head_position(), self.snake2.get_head_position()
+#             if head1 == head2:
+#                 if self.snake1.length > self.snake2.length: s2_killed_by_s1 = True; self.snake2.is_alive = False
+#                 elif self.snake2.length > self.snake1.length: s1_killed_by_s2 = True; self.snake1.is_alive = False
+#                 else: s1_killed_by_s2 = True; self.snake1.is_alive = False; s2_killed_by_s1 = True; self.snake2.is_alive = False
+#             else:
+#                 if head1 in list(self.snake2.positions)[1:]: s1_killed_by_s2 = True; self.snake1.is_alive = False
+#                 if self.snake1.is_alive and head2 in list(self.snake1.positions)[1:]: s2_killed_by_s1 = True; self.snake2.is_alive = False
+#        
+#         if s1_killed_by_s2: self.snake1.is_alive = False
+#         if s2_killed_by_s1: self.snake2.is_alive = False
+#        
+#         if self.foods:
+#             food_pos = self.foods[0].position
+#             ate_food = False
+#             if self.snake1.is_alive and self.snake1.get_head_position() == food_pos:
+#                 self.snake1.grow(); ate_food = True
+#             elif self.snake2.is_alive and self.snake2.get_head_position() == food_pos and not ate_food:
+#                 self.snake2.grow(); ate_food = True
+#            
+#             if ate_food:
+#                 self.foods.pop(0)
+#                 self._spawn_food()
+#
+#         s1_alive_final = self.snake1 and self.snake1.is_alive
+#         s2_alive_final = self.snake2 and self.snake2.is_alive
+#
+#         if not s1_alive_final and not s2_alive_final:
+#             self.game_over = True
+#             if self.snake1.score > self.snake2.score: self.winner_message = f"{self.snake1.name} wins by score! (Both died)"
+#             elif self.snake2.score > self.snake1.score: self.winner_message = f"{self.snake2.name} wins by score! (Both died)"
+#             else: self.winner_message = "Draw! (Both died, same score)"
+#         elif not s1_alive_final:
+#             self.game_over = True; self.winner_message = f"{self.snake2.name} wins! ({self.snake1.name} died)"
+#         elif not s2_alive_final:
+#             self.game_over = True; self.winner_message = f"{self.snake1.name} wins! ({self.snake2.name} died)"
+#         elif self.steps_taken >= self.max_steps:
+#             self.game_over = True
+#             if self.snake1.score > self.snake2.score: self.winner_message = f"{self.snake1.name} wins by score! (Max steps)"
+#             elif self.snake2.score > self.snake1.score: self.winner_message = f"{self.snake2.name} wins by score! (Max steps)"
+#             elif self.snake1.length > self.snake2.length: self.winner_message = f"{self.snake1.name} wins by length! (Max steps, same score)"
+#             elif self.snake2.length > self.snake1.length: self.winner_message = f"{self.snake2.name} wins by length! (Max steps, same score)"
+#             else: self.winner_message = "Draw! (Max steps, same score & length)"
+#        
+#         return self.get_state()
+#
+#     def get_state(self): # type: ignore
+#         return {
+#             "snake1": self.snake1.to_dict() if self.snake1 else None,
+#             "snake2": self.snake2.to_dict() if self.snake2 else None,
+#             "foods": [food.position for food in self.foods],
+#             "game_over": self.game_over,
+#             "steps_taken": self.steps_taken,
+#             "grid_width": self.grid_width,
+#             "grid_height": self.grid_height,
+#             "winner_message": self.winner_message
+#         }
+#
+# # Make INITIAL_SNAKE_LENGTH accessible if needed by SnakeEnvironment or Snake directly
+# INITIAL_SNAKE_LENGTH = 3
+#
+# print("Python engine loaded by Pyodide") # For debugging
+#
+`;
+
+        // --- UI Elements ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const startBattleBtn = document.getElementById('startBattleBtn');
+        const statusDiv = document.getElementById('status');
+        const scoresDiv = document.getElementById('scores');
+        const aiNamesDiv = document.getElementById('aiNames');
+        const loadingStatusDiv = document.getElementById('loadingStatus');
+        const errorMessageDiv = document.getElementById('errorMessage');
+
+        // --- Pyodide and Game State ---
+        let pyodide = null;
+        let pyGameEnv = null;
+        let championsList = [];
+        let gameLoopInterval = null;
+        let isLoading = false;
+        let initialSnakeLength = 3; // Can be adjusted, ensure Python side matches
+
+        // --- Canvas Setup ---
+        canvas.width = GRID_WIDTH * CELL_SIZE;
+        canvas.height = GRID_HEIGHT * CELL_SIZE;
+
+        // --- Helper Functions ---
+        function showError(message) {
+            errorMessageDiv.textContent = message;
+            console.error(message);
+        }
+        function showLoadingStatus(message) {
+            loadingStatusDiv.textContent = message;
+        }
+        function clearMessages() {
+            errorMessageDiv.textContent = '';
+            // loadingStatusDiv.textContent = ''; // Keep loading status until done
+        }
+
+        // --- Pyodide Initialization ---
+        async function initPyodide() {
+            if (pyodide) return pyodide;
+            isLoading = true;
+            startBattleBtn.disabled = true;
+            showLoadingStatus("Loading Pyodide runtime...");
+            try {
+                pyodide = await loadPyodide();
+                showLoadingStatus("Pyodide loaded. Loading Python game engine...");
+                await pyodide.loadPackage(["micropip"]); // If AIs use other packages, list them or use micropip
+                await pyodide.runPythonAsync(PYTHON_ENGINE_CODE);
+                showLoadingStatus("Python game engine ready.");
+                return pyodide;
+            } catch (error) {
+                showError(`Pyodide initialization failed: ${error}`);
+                throw error;
+            } finally {
+                isLoading = false;
+                startBattleBtn.disabled = false; // Re-enable if champions are loaded
+            }
+        }
+
+        // --- Champion Loading ---
+        async function loadChampionsManifest() {
+            showLoadingStatus("Fetching champion list...");
+            try {
+                // Adjust path if your index.html is not at the root with past_champions folder
+                const response = await fetch('./past_champions/champions_manifest.json');
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch champions_manifest.json: ${response.statusText}`);
+                }
+                championsList = await response.json();
+                if (!championsList || championsList.length < 2) {
+                    showError("Not enough champions (need at least 2) in manifest or manifest is invalid.");
+                    return false;
+                }
+                showLoadingStatus(`Found ${championsList.length} champions. Ready to battle!`);
+                return true;
+            } catch (error) {
+                showError(`Error loading champions: ${error}`);
+                championsList = [];
+                return false;
+            }
+        }
+        
+        async function getAIFunction(aiInfo) {
+            showLoadingStatus(`Loading AI: ${aiInfo.name}...`);
+            try {
+                const response = await fetch(`./past_champions/${aiInfo.file}`);
+                if (!response.ok) throw new Error(`Failed to fetch AI file ${aiInfo.file}: ${response.statusText}`);
+                const aiCode = await response.text();
+                
+                // Ensure Pyodide is ready and engine code (with load_ai_function_from_string) is loaded
+                if (!pyodide || !pyodide.globals.get('load_ai_function_from_string')) {
+                     await initPyodide(); // Try to init again if not ready
+                }
+                if (!pyodide.globals.get('load_ai_function_from_string')){
+                    throw new Error("Python function 'load_ai_function_from_string' not available.");
+                }
+
+                const pyAIFunction = pyodide.globals.get('load_ai_function_from_string')(aiCode);
+                if (!pyAIFunction) {
+                    throw new Error(`Could not load AI function from ${aiInfo.file}. Check Python console for details from load_ai_function_from_string.`);
+                }
+                showLoadingStatus(`AI ${aiInfo.name} loaded.`);
+                return pyAIFunction;
+            } catch (error) {
+                showError(`Error loading AI ${aiInfo.name} (${aiInfo.file}): ${error}`);
+                throw error; // Re-throw to stop battle setup
+            }
+        }
+
+
+        // --- Drawing Functions ---
+        function drawGrid() {
+            ctx.strokeStyle = GRID_COLOR;
+            for (let x = 0; x <= GRID_WIDTH; x++) {
+                ctx.beginPath();
+                ctx.moveTo(x * CELL_SIZE, 0);
+                ctx.lineTo(x * CELL_SIZE, canvas.height);
+                ctx.stroke();
+            }
+            for (let y = 0; y <= GRID_HEIGHT; y++) {
+                ctx.beginPath();
+                ctx.moveTo(0, y * CELL_SIZE);
+                ctx.lineTo(canvas.width, y * CELL_SIZE);
+                ctx.stroke();
+            }
+        }
+
+        function drawSnake(snake, color, headColor) {
+            if (!snake || !snake.is_alive || !snake.positions) return;
+            const positions = snake.positions.toJs ? snake.positions.toJs() : snake.positions; // Handle PyProxy
+
+            positions.forEach((pos, index) => {
+                const [x, y] = pos.toJs ? pos.toJs() : pos; // Handle PyProxy for individual positions
+                ctx.fillStyle = (index === 0) ? headColor : color;
+                ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                ctx.strokeStyle = "#333"; // Segment outline
+                ctx.strokeRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+            });
+        }
+
+        function drawFoods(foodsList) {
+            if (!foodsList) return;
+            const foods = foodsList.toJs ? foodsList.toJs() : foodsList; // Handle PyProxy
+
+            foods.forEach(foodPos => {
+                const [x, y] = foodPos.toJs ? foodPos.toJs() : foodPos; // Handle PyProxy
+                ctx.fillStyle = FOOD_COLOR;
+                ctx.beginPath();
+                ctx.arc(x * CELL_SIZE + CELL_SIZE / 2, y * CELL_SIZE + CELL_SIZE / 2, CELL_SIZE / 2.5, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.strokeStyle = "#c69500"; // Food outline
+                ctx.stroke();
+            });
+        }
+
+        function renderGame(gameState) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawGrid();
+
+            if (gameState.foods) {
+                drawFoods(gameState.foods);
+            }
+            if (gameState.snake1) {
+                drawSnake(gameState.snake1, SNAKE_1_COLOR, SNAKE_1_HEAD_COLOR);
+            }
+            if (gameState.snake2) {
+                drawSnake(gameState.snake2, SNAKE_2_COLOR, SNAKE_2_HEAD_COLOR);
+            }
+
+            // Update scores and names
+            const s1Name = gameState.snake1 ? gameState.snake1.name : "P1";
+            const s2Name = gameState.snake2 ? gameState.snake2.name : "P2";
+            const s1Score = gameState.snake1 ? gameState.snake1.score : 0;
+            const s2Score = gameState.snake2 ? gameState.snake2.score : 0;
+            
+            aiNamesDiv.innerHTML = `<span class="snake1-name">${s1Name}</span> vs <span class="snake2-name">${s2Name}</span>`;
+            scoresDiv.textContent = `Score: ${s1Name} (${s1Score}) - ${s2Name} (${s2Score})`;
+            
+            if (gameState.game_over) {
+                statusDiv.textContent = `Game Over! ${gameState.winner_message || "No winner determined."}`;
+            } else {
+                statusDiv.textContent = `Step: ${gameState.steps_taken || 0} / ${MAX_STEPS_PER_GAME}`;
+            }
+        }
+
+        // --- Game Loop ---
+        function gameStep() {
+            if (!pyGameEnv || isLoading) return;
+
+            try {
+                const rawState = pyGameEnv.run_step();
+                // Convert PyProxy to JS object, deeply.
+                const gameState = rawState.toJs({ dict_converter: Object.fromEntries, create_proxies: false }); 
+                rawState.destroy(); // Clean up proxy
+
+                renderGame(gameState);
+
+                if (gameState.game_over) {
+                    clearInterval(gameLoopInterval);
+                    gameLoopInterval = null;
+                    startBattleBtn.disabled = false;
+                    showLoadingStatus("Battle ended. Ready for new battle!");
+                    console.log("Game Over:", gameState.winner_message);
+                }
+            } catch (error) {
+                showError(`Error during game step: ${error}`);
+                console.error("Error in game step:", error);
+                clearInterval(gameLoopInterval);
+                gameLoopInterval = null;
+                startBattleBtn.disabled = false;
+                isLoading = false;
+            }
+        }
+
+        async function startBattle() {
+            clearMessages();
+            if (isLoading) {
+                showError("Still loading, please wait.");
+                return;
+            }
+            if (gameLoopInterval) { // Stop previous game if any
+                clearInterval(gameLoopInterval);
+                gameLoopInterval = null;
+            }
+
+            isLoading = true;
+            startBattleBtn.disabled = true;
+            statusDiv.textContent = "Setting up new battle...";
+
+            try {
+                if (!pyodide) {
+                    await initPyodide();
+                }
+                if (championsList.length === 0) {
+                    const manifestLoaded = await loadChampionsManifest();
+                    if (!manifestLoaded || championsList.length < 2) {
+                         showError("Cannot start battle: Not enough champions loaded. Check manifest.");
+                         isLoading = false;
+                         startBattleBtn.disabled = false;
+                         return;
+                    }
+                }
+
+                // Select two different random AIs
+                let ai1Info, ai2Info;
+                let idx1 = Math.floor(Math.random() * championsList.length);
+                let idx2 = Math.floor(Math.random() * championsList.length);
+                while (idx2 === idx1) { // Ensure different AIs
+                    idx2 = Math.floor(Math.random() * championsList.length);
+                }
+                ai1Info = championsList[idx1];
+                ai2Info = championsList[idx2];
+
+                statusDiv.textContent = `Loading AIs: ${ai1Info.name} vs ${ai2Info.name}`;
+                const pyAI1Func = await getAIFunction(ai1Info);
+                const pyAI2Func = await getAIFunction(ai2Info);
+
+                if (!pyAI1Func || !pyAI2Func) {
+                    throw new Error("One or both AI functions failed to load.");
+                }
+                
+                // Get SnakeEnvironment class from Pyodide
+                const PySnakeEnvironment = pyodide.globals.get('SnakeEnvironment');
+                if (!PySnakeEnvironment) {
+                    throw new Error("Python class 'SnakeEnvironment' not found. Engine might not have loaded correctly.");
+                }
+
+                // Create game environment in Python
+                // Pass initial_snake_length to the constructor
+                pyGameEnv = PySnakeEnvironment(
+                    GRID_WIDTH, GRID_HEIGHT, MAX_STEPS_PER_GAME,
+                    pyAI1Func, pyAI2Func,
+                    ai1Info.name, ai2Info.name,
+                    initialSnakeLength // Pass the length
+                );
+                
+                // Initial render
+                const initialStateProxy = pyGameEnv.get_state();
+                const initialState = initialStateProxy.toJs({ dict_converter: Object.fromEntries, create_proxies: false });
+                initialStateProxy.destroy();
+                renderGame(initialState);
+
+                statusDiv.textContent = "Battle starting...";
+                gameLoopInterval = setInterval(gameStep, GAME_SPEED_MS);
+
+            } catch (error) {
+                showError(`Failed to start battle: ${error}`);
+                console.error("Battle start error:", error);
+                statusDiv.textContent = "Error starting battle. See console.";
+            } finally {
+                isLoading = false;
+                // Only re-enable button if game didn't start or already ended
+                if (!gameLoopInterval) startBattleBtn.disabled = false; 
+            }
+        }
+
+        // --- Event Listeners ---
+        startBattleBtn.addEventListener('click', startBattle);
+
+        // --- Initial Load ---
+        async function main() {
+            showLoadingStatus("Page loaded. Initializing...");
+            try {
+                await initPyodide(); // Pre-load Pyodide and engine
+                await loadChampionsManifest(); // Pre-load champion list
+                if (championsList.length >= 2) {
+                    startBattleBtn.disabled = false;
+                    showLoadingStatus("Ready to start a battle!");
+                } else {
+                    startBattleBtn.disabled = true;
+                    if (championsList.length > 0) { // if 1 champion
+                         showError("Need at least 2 champions in the manifest to battle.");
+                    } // Error for 0 champions already shown by loadChampionsManifest
+                }
+            } catch (error) {
+                // Errors are already shown by initPyodide or loadChampionsManifest
+                startBattleBtn.disabled = true; // Keep disabled on critical init failure
+            }
+        }
+
+        main(); // Start the initialization process
+
+    </script>
+</body>
+</html>
