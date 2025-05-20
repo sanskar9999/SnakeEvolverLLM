@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Snake AI Battles</title>
+    <title>Snake AI King of the Hill</title>
     <script src="https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js"></script>
     <style>
         body {
@@ -13,34 +13,40 @@
             align-items: center;
             margin: 0;
             padding: 20px;
-            background-color: #f0f0f0;
-            color: #333;
+            background-color: #2c3e50; /* Darker background */
+            color: #ecf0f1; /* Lighter text */
         }
-        #gameContainer {
+        #tournamentContainer {
             display: flex;
             flex-direction: column;
             align-items: center;
-            margin-top: 20px;
-            border: 1px solid #ccc;
-            padding: 15px;
-            background-color: #fff;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            margin-top: 10px;
+            border: 1px solid #34495e;
+            padding: 20px;
+            background-color: #34495e; /* Slightly lighter dark */
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            border-radius: 8px;
+            width: auto;
+            max-width: 95%;
         }
         canvas {
-            border: 2px solid #333;
-            background-color: #fdfdfd;
+            border: 2px solid #ecf0f1;
+            background-color: #1e272e; /* Dark canvas background */
             margin-bottom: 15px;
+            border-radius: 4px;
         }
-        #controls {
+        #controls, #tournamentInfo {
             margin-bottom: 15px;
             display: flex;
+            flex-wrap: wrap;
             gap: 10px;
             align-items: center;
+            justify-content: center;
         }
         button {
-            padding: 10px 15px;
+            padding: 10px 18px;
             font-size: 16px;
-            background-color: #007bff;
+            background-color: #3498db; /* Blue */
             color: white;
             border: none;
             border-radius: 5px;
@@ -48,46 +54,53 @@
             transition: background-color 0.3s ease;
         }
         button:hover {
-            background-color: #0056b3;
+            background-color: #2980b9;
         }
         button:disabled {
-            background-color: #ccc;
+            background-color: #7f8c8d; /* Grayed out */
             cursor: not-allowed;
         }
-        #status, #scores, #aiNames {
-            margin-top: 5px;
-            font-size: 1em;
+        #status, #scores, #aiNames, #kingInfo {
+            margin-top: 8px;
+            font-size: 1.1em;
             text-align: center;
         }
+        #kingInfo { font-weight: bold; color: #f1c40f; /* Gold for king */}
         #aiNames span {
-            padding: 3px 6px;
-            border-radius: 3px;
+            padding: 4px 8px;
+            border-radius: 4px;
             color: white;
+            font-weight: bold;
         }
-        .snake1-name { background-color: #28a745; } /* Green */
-        .snake2-name { background-color: #dc3545; } /* Red */
+        .snake1-name-display { background-color: #2ecc71; } /* Green */
+        .snake2-name-display { background-color: #e74c3c; } /* Red */
 
         #loadingStatus {
             font-style: italic;
-            color: #555;
+            color: #bdc3c7; /* Lighter gray */
+            margin-top: 10px;
         }
         .error-message {
-            color: red;
+            color: #e74c3c; /* Red for errors */
             font-weight: bold;
             margin-top: 10px;
         }
     </style>
 </head>
 <body>
-    <h1>Snake AI Battles</h1>
-    <div id="gameContainer">
+    <h1>Snake AI: King of the Hill</h1>
+    <div id="tournamentContainer">
         <div id="controls">
-            <button id="startBattleBtn">Start Random Battle</button>
+            <button id="startTournamentBtn">Start New Tournament</button>
+            <button id="nextBattleBtn" disabled>Next Battle</button>
+        </div>
+        <div id="tournamentInfo">
+            <div id="kingInfo">Current King: --- (Wins: 0)</div>
         </div>
         <div id="aiNames">Player 1: --- vs Player 2: ---</div>
         <div id="scores">Score: P1 (0) - P2 (0)</div>
         <canvas id="gameCanvas"></canvas>
-        <div id="status">Welcome! Click "Start Random Battle" to begin.</div>
+        <div id="status">Welcome! Click "Start New Tournament".</div>
         <div id="loadingStatus"></div>
         <div id="errorMessage" class="error-message"></div>
     </div>
@@ -96,307 +109,370 @@
         // --- Game Configuration ---
         const GRID_WIDTH = 20;
         const GRID_HEIGHT = 10;
-        const CELL_SIZE = 30; // pixels
-        const MAX_STEPS_PER_GAME = GRID_WIDTH * GRID_HEIGHT * 2.5; // Max steps before game ends in draw
+        const INITIAL_SNAKE_LENGTH = 3; // Must match Python side if it has a default
+        const CELL_SIZE = 28; // pixels
+        const MAX_STEPS_PER_GAME = GRID_WIDTH * GRID_HEIGHT * 2;
         const GAME_SPEED_MS = 100; // Milliseconds per game step
 
-        const SNAKE_1_COLOR = "#28a745"; // Green
-        const SNAKE_1_HEAD_COLOR = "#1e7e34";
-        const SNAKE_2_COLOR = "#dc3545"; // Red
-        const SNAKE_2_HEAD_COLOR = "#b21f2d";
-        const FOOD_COLOR = "#ffc107"; // Yellow
-        const GRID_COLOR = "#e0e0e0";
+        const SNAKE_1_COLOR = "#2ecc71"; // Green
+        const SNAKE_1_HEAD_COLOR = "#27ae60";
+        const SNAKE_2_COLOR = "#e74c3c"; // Red
+        const SNAKE_2_HEAD_COLOR = "#c0392b";
+        const FOOD_COLOR = "#f1c40f"; // Yellow
+        const GRID_LINE_COLOR = "#7f8c8d"; // Grid lines
 
         // --- Python Game Engine Code (to be run in Pyodide) ---
-        // IMPORTANT: Paste the content of your modified `snake_engine_for_web.py` here.
-        // This script should contain Food, Snake, SnakeEnvironment classes, and load_ai_function_from_string.
         const PYTHON_ENGINE_CODE = `
-# PASTE YOUR MODIFIED PYTHON SNAKE ENGINE CODE HERE
-# (The one with Food, Snake, SnakeEnvironment, load_ai_function_from_string)
-# Example structure (ensure it's the full, correct code):
-#
-# from collections import deque
-# from dataclasses import dataclass
-# import random
-# # ... (rest of your Python imports and class definitions) ...
-#
-# @dataclass
-# class Food:
-#     position: tuple[int, int]
-#
-# class Snake:
-#     DIRECTIONS_MAP = [(0, -1), (1, 0), (0, 1), (-1, 0)] # UP, RIGHT, DOWN, LEFT
-#     ACTIONS_LIST = [0, 1, 2, 3]
-#     OPPOSITE_ACTIONS_MAP = {0: 2, 1: 3, 2: 0, 3: 1}
-#     # ... (full Snake class implementation) ...
-#     def __init__(self, x: int, y: int, initial_direction_idx = None,
-#                  grid_width: int = 20, grid_height: int = 10, initial_length: int = 3): # Added initial_length
-#         self.grid_width = grid_width
-#         self.grid_height = grid_height
-#         self.positions = deque()
-#         self.direction_idx = initial_direction_idx if initial_direction_idx is not None \
-#                              else random.choice(self.ACTIONS_LIST)
-#         self.length = initial_length # Use parameter
-#         self.score = 0
-#         self.is_alive = True
-#         self.name = "Snake"
-#
-#         head_pos = (x,y)
-#         self.positions.appendleft(head_pos)
-#        
-#         dx_segment_growth = -self.DIRECTIONS_MAP[self.direction_idx][0]
-#         dy_segment_growth = -self.DIRECTIONS_MAP[self.direction_idx][1]
-#
-#         current_segment_x, current_segment_y = head_pos
-#         for _ in range(1, self.length): # Use self.length
-#             next_segment_x = (current_segment_x + dx_segment_growth + self.grid_width) % self.grid_width
-#             next_segment_y = (current_segment_y + dy_segment_growth + self.grid_height) % self.grid_height
-#             if (next_segment_x, next_segment_y) in self.positions:
-#                 break
-#             self.positions.append((next_segment_x, next_segment_y))
-#             current_segment_x, current_segment_y = next_segment_x, next_segment_y
-#
-#     def get_head_position(self): # type: ignore
-#         return self.positions[0]
-#
-#     def get_current_direction_vector(self): # type: ignore
-#         return self.DIRECTIONS_MAP[self.direction_idx]
-#
-#     def get_valid_actions(self): # type: ignore
-#         if not self.is_alive: return []
-#         invalid_action = self.OPPOSITE_ACTIONS_MAP[self.direction_idx]
-#         return [a for a in self.ACTIONS_LIST if a != invalid_action]
-#
-#     def move(self, action_idx: int): # type: ignore
-#         if not self.is_alive: return False
-#         self.direction_idx = action_idx
-#         head_x, head_y = self.get_head_position()
-#         dx, dy = self.get_current_direction_vector()
-#         new_head = ((head_x + dx) % self.grid_width, (head_y + dy) % self.grid_height)
-#
-#         body_to_check = list(self.positions)
-#         if len(body_to_check) >= self.length:
-#             body_to_check = body_to_check[:-1]
-#        
-#         if new_head in body_to_check:
-#             self.is_alive = False
-#             return True
-#         self.positions.appendleft(new_head)
-#         if len(self.positions) > self.length:
-#             self.positions.pop()
-#         return False
-#
-#     def grow(self): # type: ignore
-#         if not self.is_alive: return
-#         # MAX_SNAKE_LENGTH needs to be defined or passed if used
-#         self.length = self.length + 1 
-#         self.score += 1
-#
-#     def to_dict(self): # type: ignore
-#         return {
-#             "positions": list(self.positions),
-#             "direction_idx": self.direction_idx,
-#             "length": self.length,
-#             "score": self.score,
-#             "is_alive": self.is_alive,
-#             "name": self.name,
-#             "grid_width": self.grid_width,
-#             "grid_height": self.grid_height
-#         }
-#
-# def load_ai_function_from_string(python_code_string: str, function_name: str = "get_challenger_action"):
-#     module_name = f"ai_module_{random.randint(10000, 99999)}"
-#     exec_globals = {"Snake": Snake, "Food": Food, "random": random, "deque": deque} # Ensure deque is available
-#     try:
-#         exec(python_code_string, exec_globals)
-#         ai_function = exec_globals.get(function_name)
-#         if callable(ai_function):
-#             return ai_function
-#         else:
-#             print(f"Error: Function '{function_name}' not found or not callable in loaded AI code.")
-#             return None
-#     except Exception as e:
-#         print(f"Error executing AI code string: {e}")
-#         return None
-#
-# class SnakeEnvironment:
-#     def __init__(self, grid_width: int, grid_height: int, max_steps: int,
-#                  ai1_logic: callable, ai2_logic: callable, # type: ignore
-#                  snake1_name: str = "P1", snake2_name: str = "P2", initial_snake_length: int = 3):
-#         self.grid_width = grid_width
-#         self.grid_height = grid_height
-#         self.max_steps = max_steps
-#         self.ai1_logic = ai1_logic
-#         self.ai2_logic = ai2_logic
-#         self.snake1_name_init = snake1_name
-#         self.snake2_name_init = snake2_name
-#         self.initial_snake_length = initial_snake_length # Store this
-#
-#         self.snake1 = None # type: ignore
-#         self.snake2 = None # type: ignore
-#         self.foods = [] # type: ignore
-#         self.game_over = False
-#         self.steps_taken = 0
-#         self.winner_message = ""
-#         self.reset()
-#
-#     def reset(self): # type: ignore
-#         self.steps_taken = 0
-#         self.game_over = False
-#         self.winner_message = ""
-#        
-#         s1_x, s1_y = self.grid_width // 4, self.grid_height // 2
-#         s1_dir = 1 # Right
-#         self.snake1 = Snake(s1_x, s1_y, initial_direction_idx=s1_dir, grid_width=self.grid_width, grid_height=self.grid_height, initial_length=self.initial_snake_length)
-#         self.snake1.name = self.snake1_name_init
-#
-#         s2_x, s2_y = self.grid_width * 3 // 4, self.grid_height // 2
-#         s2_dir = 3 # Left
-#         self.snake2 = Snake(s2_x, s2_y, initial_direction_idx=s2_dir, grid_width=self.grid_width, grid_height=self.grid_height, initial_length=self.initial_snake_length)
-#         self.snake2.name = self.snake2_name_init
-#
-#         # Basic check for immediate overlap (can be improved)
-#         if any(p in self.snake1.positions for p in self.snake2.positions):
-#             # Simple fallback: slightly adjust s2 if overlap
-#             self.snake2 = Snake(s2_x + 1, s2_y, initial_direction_idx=s2_dir, grid_width=self.grid_width, grid_height=self.grid_height, initial_length=self.initial_snake_length)
-#             self.snake2.name = self.snake2_name_init
-#
-#         self.foods = []
-#         self._spawn_food()
-#
-#     def _spawn_food(self): # type: ignore
-#         if len(self.foods) > 0: return
-#         occupied_cells = set()
-#         if self.snake1 and self.snake1.is_alive: occupied_cells.update(self.snake1.positions)
-#         if self.snake2 and self.snake2.is_alive: occupied_cells.update(self.snake2.positions)
-#        
-#         empty_cells = [(x, y) for x in range(self.grid_width) for y in range(self.grid_height) if (x,y) not in occupied_cells]
-#         if empty_cells:
-#             self.foods.append(Food(random.choice(empty_cells)))
-#
-#     def _get_actions_from_ais(self): # type: ignore
-#         action1, action2 = self.snake1.direction_idx, self.snake2.direction_idx
-#         current_foods_for_ai = list(self.foods)
-#
-#         if self.snake1.is_alive:
-#             valid_actions1 = self.snake1.get_valid_actions()
-#             if valid_actions1:
-#                 try:
-#                     act1_candidate = self.ai1_logic(self.snake1, self.snake2, current_foods_for_ai, self.grid_width, self.grid_height)
-#                     action1 = act1_candidate if act1_candidate in valid_actions1 else random.choice(valid_actions1)
-#                 except Exception as e:
-#                     print(f"Error in AI1 ({self.snake1.name}) logic: {e}")
-#                     action1 = random.choice(valid_actions1)
-#        
-#         if self.snake2.is_alive:
-#             valid_actions2 = self.snake2.get_valid_actions()
-#             if valid_actions2:
-#                 try:
-#                     act2_candidate = self.ai2_logic(self.snake2, self.snake1, current_foods_for_ai, self.grid_width, self.grid_height)
-#                     action2 = act2_candidate if act2_candidate in valid_actions2 else random.choice(valid_actions2)
-#                 except Exception as e:
-#                     print(f"Error in AI2 ({self.snake2.name}) logic: {e}")
-#                     action2 = random.choice(valid_actions2)
-#         return action1, action2
-#
-#     def run_step(self): # type: ignore
-#         if self.game_over:
-#             return self.get_state()
-#
-#         action1, action2 = self._get_actions_from_ais()
-#         self.steps_taken += 1
-#
-#         if self.snake1 and self.snake1.is_alive: self.snake1.move(action1)
-#         if self.snake2 and self.snake2.is_alive: self.snake2.move(action2)
-#
-#         s1_died_self = not self.snake1.is_alive
-#         s2_died_self = not self.snake2.is_alive
-#
-#         s1_killed_by_s2, s2_killed_by_s1 = False, False
-#
-#         if self.snake1.is_alive and self.snake2.is_alive:
-#             head1, head2 = self.snake1.get_head_position(), self.snake2.get_head_position()
-#             if head1 == head2:
-#                 if self.snake1.length > self.snake2.length: s2_killed_by_s1 = True; self.snake2.is_alive = False
-#                 elif self.snake2.length > self.snake1.length: s1_killed_by_s2 = True; self.snake1.is_alive = False
-#                 else: s1_killed_by_s2 = True; self.snake1.is_alive = False; s2_killed_by_s1 = True; self.snake2.is_alive = False
-#             else:
-#                 if head1 in list(self.snake2.positions)[1:]: s1_killed_by_s2 = True; self.snake1.is_alive = False
-#                 if self.snake1.is_alive and head2 in list(self.snake1.positions)[1:]: s2_killed_by_s1 = True; self.snake2.is_alive = False
-#        
-#         if s1_killed_by_s2: self.snake1.is_alive = False
-#         if s2_killed_by_s1: self.snake2.is_alive = False
-#        
-#         if self.foods:
-#             food_pos = self.foods[0].position
-#             ate_food = False
-#             if self.snake1.is_alive and self.snake1.get_head_position() == food_pos:
-#                 self.snake1.grow(); ate_food = True
-#             elif self.snake2.is_alive and self.snake2.get_head_position() == food_pos and not ate_food:
-#                 self.snake2.grow(); ate_food = True
-#            
-#             if ate_food:
-#                 self.foods.pop(0)
-#                 self._spawn_food()
-#
-#         s1_alive_final = self.snake1 and self.snake1.is_alive
-#         s2_alive_final = self.snake2 and self.snake2.is_alive
-#
-#         if not s1_alive_final and not s2_alive_final:
-#             self.game_over = True
-#             if self.snake1.score > self.snake2.score: self.winner_message = f"{self.snake1.name} wins by score! (Both died)"
-#             elif self.snake2.score > self.snake1.score: self.winner_message = f"{self.snake2.name} wins by score! (Both died)"
-#             else: self.winner_message = "Draw! (Both died, same score)"
-#         elif not s1_alive_final:
-#             self.game_over = True; self.winner_message = f"{self.snake2.name} wins! ({self.snake1.name} died)"
-#         elif not s2_alive_final:
-#             self.game_over = True; self.winner_message = f"{self.snake1.name} wins! ({self.snake2.name} died)"
-#         elif self.steps_taken >= self.max_steps:
-#             self.game_over = True
-#             if self.snake1.score > self.snake2.score: self.winner_message = f"{self.snake1.name} wins by score! (Max steps)"
-#             elif self.snake2.score > self.snake1.score: self.winner_message = f"{self.snake2.name} wins by score! (Max steps)"
-#             elif self.snake1.length > self.snake2.length: self.winner_message = f"{self.snake1.name} wins by length! (Max steps, same score)"
-#             elif self.snake2.length > self.snake1.length: self.winner_message = f"{self.snake2.name} wins by length! (Max steps, same score)"
-#             else: self.winner_message = "Draw! (Max steps, same score & length)"
-#        
-#         return self.get_state()
-#
-#     def get_state(self): # type: ignore
-#         return {
-#             "snake1": self.snake1.to_dict() if self.snake1 else None,
-#             "snake2": self.snake2.to_dict() if self.snake2 else None,
-#             "foods": [food.position for food in self.foods],
-#             "game_over": self.game_over,
-#             "steps_taken": self.steps_taken,
-#             "grid_width": self.grid_width,
-#             "grid_height": self.grid_height,
-#             "winner_message": self.winner_message
-#         }
-#
-# # Make INITIAL_SNAKE_LENGTH accessible if needed by SnakeEnvironment or Snake directly
-# INITIAL_SNAKE_LENGTH = 3
-#
-# print("Python engine loaded by Pyodide") # For debugging
-#
+import random
+from collections import deque
+from dataclasses import dataclass
+from typing import List, Tuple, Optional, Callable # For type hints if AIs use them
+
+# --- Game Classes (adapted from your main_snake_game.py) ---
+@dataclass
+class Food:
+    position: Tuple[int, int]
+
+class Snake:
+    DIRECTIONS_MAP = [(0, -1), (1, 0), (0, 1), (-1, 0)] # UP, RIGHT, DOWN, LEFT
+    ACTIONS_LIST = [0, 1, 2, 3]
+    OPPOSITE_ACTIONS_MAP = {0: 2, 1: 3, 2: 0, 3: 1}
+
+    def __init__(self, x: int, y: int, grid_width: int, grid_height: int, initial_length: int, initial_direction_idx: Optional[int] = None):
+        self.grid_width = grid_width
+        self.grid_height = grid_height
+        self.initial_length = initial_length # Store for reference if needed
+
+        self.positions = deque()
+        self.direction_idx = initial_direction_idx if initial_direction_idx is not None \
+                             else random.choice(self.ACTIONS_LIST)
+        self.length = initial_length
+        self.score = 0
+        self.is_alive = True
+        self.name = "Snake" # Will be overridden by environment
+
+        head_pos = (x,y)
+        self.positions.appendleft(head_pos)
+        
+        current_segment_x, current_segment_y = head_pos
+        dx_segment_growth = -self.DIRECTIONS_MAP[self.direction_idx][0]
+        dy_segment_growth = -self.DIRECTIONS_MAP[self.direction_idx][1]
+
+        for _ in range(1, self.length):
+            next_segment_x = (current_segment_x + dx_segment_growth + self.grid_width) % self.grid_width
+            next_segment_y = (current_segment_y + dy_segment_growth + self.grid_height) % self.grid_height
+            if (next_segment_x, next_segment_y) in self.positions:
+                break 
+            self.positions.append((next_segment_x, next_segment_y))
+            current_segment_x, current_segment_y = next_segment_x, next_segment_y
+        
+    def get_head_position(self) -> Tuple[int, int]:
+        return self.positions[0]
+
+    def get_current_direction_vector(self) -> Tuple[int, int]:
+        return self.DIRECTIONS_MAP[self.direction_idx]
+
+    def get_valid_actions(self) -> List[int]:
+        if not self.is_alive: return []
+        invalid_action = self.OPPOSITE_ACTIONS_MAP[self.direction_idx]
+        return [a for a in self.ACTIONS_LIST if a != invalid_action]
+
+    def move(self, action_idx: int) -> bool: 
+        if not self.is_alive: return False
+
+        self.direction_idx = action_idx
+        head_x, head_y = self.get_head_position()
+        dx, dy = self.get_current_direction_vector()
+        new_head = ((head_x + dx) % self.grid_width, (head_y + dy) % self.grid_height)
+
+        body_to_check = list(self.positions)
+        if len(body_to_check) >= self.length: 
+            body_to_check = body_to_check[:-1] 
+        
+        if new_head in body_to_check:
+            self.is_alive = False
+            return True 
+
+        self.positions.appendleft(new_head)
+        if len(self.positions) > self.length:
+            self.positions.pop()
+        return False 
+
+    def grow(self):
+        if not self.is_alive: return
+        # MAX_SNAKE_LENGTH is not strictly enforced here for simplicity in web version
+        # but AIs should be mindful of grid limits.
+        self.length += 1
+        self.score += 1
+
+    def to_dict(self):
+        return {
+            "positions": list(self.positions), # Convert deque to list for JS
+            "direction_idx": self.direction_idx,
+            "length": self.length,
+            "score": self.score,
+            "is_alive": self.is_alive,
+            "name": self.name,
+            "grid_width": self.grid_width, # For AI reference if needed
+            "grid_height": self.grid_height # For AI reference if needed
+        }
+
+def load_ai_function_from_string(python_code_string: str, function_name: str = "get_challenger_action"):
+    # This function will be called by JS to load AI code.
+    # It needs access to Snake, Food, random, deque from its execution scope.
+    exec_globals = {
+        "Snake": Snake, 
+        "Food": Food,   
+        "random": random,
+        "deque": deque,
+        # Constants AIs might expect (ensure these match JS-side config if AIs use them globally)
+        # "GRID_WIDTH": GRID_WIDTH_FROM_JS, # These would need to be passed or set globally
+        # "GRID_HEIGHT": GRID_HEIGHT_FROM_JS,
+        # "INITIAL_SNAKE_LENGTH": INITIAL_SNAKE_LENGTH_FROM_JS
+    }
+    try:
+        # print(f"Attempting to exec AI code. Globals type: {type(exec_globals['Snake'])}")
+        exec(python_code_string, exec_globals)
+        ai_function = exec_globals.get(function_name)
+        if callable(ai_function):
+            # print(f"Successfully loaded AI function: {function_name}")
+            return ai_function
+        else:
+            print(f"Error: AI Function '{function_name}' not found or not callable after exec.")
+            # print(f"Available names in AI module after exec: {list(exec_globals.keys())}")
+            return None
+    except Exception as e:
+        print(f"Error executing AI code string: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+class SnakeEnvironment:
+    def __init__(self, grid_width: int, grid_height: int, initial_snake_length: int, max_steps: int,
+                 ai1_logic: Callable, ai2_logic: Callable, 
+                 snake1_name: str = "P1", snake2_name: str = "P2"):
+        self.grid_width = grid_width
+        self.grid_height = grid_height
+        self.initial_snake_length = initial_snake_length
+        self.max_steps = max_steps
+        self.ai1_logic = ai1_logic
+        self.ai2_logic = ai2_logic
+        self.snake1_name_init = snake1_name
+        self.snake2_name_init = snake2_name
+
+        self.snake1: Optional[Snake] = None
+        self.snake2: Optional[Snake] = None
+        self.foods: List[Food] = []
+        self.game_over = False
+        self.steps_taken = 0
+        self.winner_snake_obj_ref = None # To identify winner by object reference
+        self.winner_message = ""
+        self.reset()
+
+    def reset(self):
+        self.steps_taken = 0
+        self.game_over = False
+        self.winner_snake_obj_ref = None
+        self.winner_message = ""
+        
+        # Fixed starting positions and directions for consistency in web display
+        s1_x, s1_y = self.grid_width // 4, self.grid_height // 2
+        s1_dir = 1 # Right
+        self.snake1 = Snake(s1_x, s1_y, self.grid_width, self.grid_height, self.initial_snake_length, initial_direction_idx=s1_dir)
+        self.snake1.name = self.snake1_name_init
+
+        s2_x, s2_y = self.grid_width * 3 // 4, self.grid_height // 2
+        s2_dir = 3 # Left
+        self.snake2 = Snake(s2_x, s2_y, self.grid_width, self.grid_height, self.initial_snake_length, initial_direction_idx=s2_dir)
+        self.snake2.name = self.snake2_name_init
+
+        # Basic check for immediate overlap (can be improved if needed)
+        if any(p in self.snake1.positions for p in self.snake2.positions) or \
+           any(p in self.snake2.positions for p in self.snake1.positions):
+            # Simple fallback: slightly adjust s2 if overlap
+            print("Initial snake overlap detected, attempting to adjust s2.")
+            self.snake2 = Snake(s2_x + 1, s2_y, self.grid_width, self.grid_height, self.initial_snake_length, initial_direction_idx=s2_dir)
+            self.snake2.name = self.snake2_name_init
+            if any(p in self.snake1.positions for p in self.snake2.positions): # Check again
+                 print("Overlap still present after adjustment. This might lead to issues.")
+
+
+        self.foods = []
+        self._spawn_food()
+
+    def _spawn_food(self):
+        if len(self.foods) > 0: return 
+        occupied_cells = set()
+        if self.snake1 and self.snake1.is_alive: occupied_cells.update(self.snake1.positions)
+        if self.snake2 and self.snake2.is_alive: occupied_cells.update(self.snake2.positions)
+        
+        empty_cells = [(x, y) for x in range(self.grid_width) for y in range(self.grid_height) if (x,y) not in occupied_cells]
+        if empty_cells:
+            self.foods.append(Food(random.choice(empty_cells)))
+
+    def _get_actions_from_ais(self):
+        action1, action2 = self.snake1.direction_idx, self.snake2.direction_idx
+        
+        # Create copies of food list for each AI, as they might modify it (though they shouldn't)
+        # Or pass a tuple of food positions directly
+        current_foods_for_ai = list(self.foods) # AIs expect list of Food objects
+
+        if self.snake1.is_alive:
+            valid_actions1 = self.snake1.get_valid_actions()
+            if valid_actions1:
+                try:
+                    # Pass opponent as None if not alive, or the object itself
+                    opponent_s1 = self.snake2 if self.snake2.is_alive else None
+                    act1_candidate = self.ai1_logic(self.snake1, opponent_s1, current_foods_for_ai, self.grid_width, self.grid_height)
+                    action1 = act1_candidate if act1_candidate in valid_actions1 else random.choice(valid_actions1)
+                except Exception as e:
+                    print(f"Error in AI1 ({self.snake1.name}) logic: {e}. Choosing random valid action.")
+                    traceback.print_exc()
+                    action1 = random.choice(valid_actions1)
+        
+        if self.snake2.is_alive:
+            valid_actions2 = self.snake2.get_valid_actions()
+            if valid_actions2:
+                try:
+                    opponent_s2 = self.snake1 if self.snake1.is_alive else None
+                    act2_candidate = self.ai2_logic(self.snake2, opponent_s2, current_foods_for_ai, self.grid_width, self.grid_height)
+                    action2 = act2_candidate if act2_candidate in valid_actions2 else random.choice(valid_actions2)
+                except Exception as e:
+                    print(f"Error in AI2 ({self.snake2.name}) logic: {e}. Choosing random valid action.")
+                    traceback.print_exc()
+                    action2 = random.choice(valid_actions2)
+        return action1, action2
+
+    def run_step(self):
+        if self.game_over:
+            return self.get_state()
+
+        action1, action2 = self._get_actions_from_ais()
+        self.steps_taken += 1
+
+        s1_died_self, s2_died_self = False, False
+        if self.snake1 and self.snake1.is_alive: s1_died_self = self.snake1.move(action1)
+        if self.snake2 and self.snake2.is_alive: s2_died_self = self.snake2.move(action2)
+        
+        # Update aliveness based on move()
+        if s1_died_self: self.snake1.is_alive = False
+        if s2_died_self: self.snake2.is_alive = False
+
+        s1_killed_by_s2, s2_killed_by_s1 = False, False
+
+        if self.snake1.is_alive and self.snake2.is_alive: # Both were alive before this check
+            head1, head2 = self.snake1.get_head_position(), self.snake2.get_head_position()
+            if head1 == head2: # Head-on collision
+                if self.snake1.length > self.snake2.length: s2_killed_by_s1 = True
+                elif self.snake2.length > self.snake1.length: s1_killed_by_s2 = True
+                else: # Equal length head-on: both die
+                    s1_killed_by_s2 = True; s2_killed_by_s1 = True
+            else: # Check if one ran into other's body
+                # Check if s1 head ran into s2 body (excluding s2's new head if it also moved into s1's old spot)
+                if head1 in list(self.snake2.positions)[1:]: s1_killed_by_s2 = True
+                # Check if s2 head ran into s1 body
+                if head2 in list(self.snake1.positions)[1:]: s2_killed_by_s1 = True
+        
+        if s1_killed_by_s2: self.snake1.is_alive = False
+        if s2_killed_by_s1: self.snake2.is_alive = False
+        
+        # Food eating
+        if self.foods:
+            food_pos = self.foods[0].position
+            ate_food_s1 = False
+            if self.snake1.is_alive and self.snake1.get_head_position() == food_pos:
+                self.snake1.grow(); ate_food_s1 = True
+            
+            ate_food_s2 = False
+            # S2 can only eat if S1 didn't eat it in the same step
+            if not ate_food_s1 and self.snake2.is_alive and self.snake2.get_head_position() == food_pos:
+                self.snake2.grow(); ate_food_s2 = True
+            
+            if ate_food_s1 or ate_food_s2:
+                self.foods.pop(0)
+                self._spawn_food()
+
+        # Determine game over and winner
+        s1_alive_final = self.snake1 and self.snake1.is_alive
+        s2_alive_final = self.snake2 and self.snake2.is_alive
+
+        if not s1_alive_final and not s2_alive_final:
+            self.game_over = True
+            if self.snake1.score > self.snake2.score: 
+                self.winner_message = f"{self.snake1.name} wins by score! (Both died)"
+                self.winner_snake_obj_ref = self.snake1
+            elif self.snake2.score > self.snake1.score: 
+                self.winner_message = f"{self.snake2.name} wins by score! (Both died)"
+                self.winner_snake_obj_ref = self.snake2
+            else: self.winner_message = "Draw! (Both died, same score)"
+        elif not s1_alive_final:
+            self.game_over = True; self.winner_message = f"{self.snake2.name} wins! ({self.snake1.name} eliminated)"
+            self.winner_snake_obj_ref = self.snake2
+        elif not s2_alive_final:
+            self.game_over = True; self.winner_message = f"{self.snake1.name} wins! ({self.snake2.name} eliminated)"
+            self.winner_snake_obj_ref = self.snake1
+        elif self.steps_taken >= self.max_steps:
+            self.game_over = True
+            if self.snake1.score > self.snake2.score: 
+                self.winner_message = f"{self.snake1.name} wins by score! (Max steps)"
+                self.winner_snake_obj_ref = self.snake1
+            elif self.snake2.score > self.snake1.score: 
+                self.winner_message = f"{self.snake2.name} wins by score! (Max steps)"
+                self.winner_snake_obj_ref = self.snake2
+            elif self.snake1.length > self.snake2.length: 
+                self.winner_message = f"{self.snake1.name} wins by length! (Max steps, same score)"
+                self.winner_snake_obj_ref = self.snake1
+            elif self.snake2.length > self.snake1.length: 
+                self.winner_message = f"{self.snake2.name} wins by length! (Max steps, same score)"
+                self.winner_snake_obj_ref = self.snake2
+            else: self.winner_message = "Draw! (Max steps, same score & length)"
+        
+        return self.get_state()
+
+    def get_state(self):
+        # Determine winner name based on object reference for JS side
+        winner_name = None
+        if self.winner_snake_obj_ref:
+            winner_name = self.winner_snake_obj_ref.name
+
+        return {
+            "snake1": self.snake1.to_dict() if self.snake1 else None,
+            "snake2": self.snake2.to_dict() if self.snake2 else None,
+            "foods": [food.position for food in self.foods], # Pass positions
+            "game_over": self.game_over,
+            "steps_taken": self.steps_taken,
+            "grid_width": self.grid_width,
+            "grid_height": self.grid_height,
+            "winner_message": self.winner_message,
+            "winner_name": winner_name # Name of the winning snake AI
+        }
+
+print("Python Snake Game Engine (for Web/Pyodide) Loaded.")
 `;
 
         // --- UI Elements ---
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        const startBattleBtn = document.getElementById('startBattleBtn');
+        const startTournamentBtn = document.getElementById('startTournamentBtn');
+        const nextBattleBtn = document.getElementById('nextBattleBtn');
         const statusDiv = document.getElementById('status');
         const scoresDiv = document.getElementById('scores');
         const aiNamesDiv = document.getElementById('aiNames');
+        const kingInfoDiv = document.getElementById('kingInfo');
         const loadingStatusDiv = document.getElementById('loadingStatus');
         const errorMessageDiv = document.getElementById('errorMessage');
 
         // --- Pyodide and Game State ---
         let pyodide = null;
         let pyGameEnv = null;
-        let championsList = [];
+        let championsList = []; // Array of {name: string, file: string}
         let gameLoopInterval = null;
         let isLoading = false;
-        let initialSnakeLength = 3; // Can be adjusted, ensure Python side matches
+
+        // --- Tournament State ---
+        let currentKing = null; // { name: string, file: string, pyFunc: PyProxy, wins: 0 }
+        let currentChallenger = null; // { name: string, file: string, pyFunc: PyProxy }
+        let availableChallengers = []; // To pick from, excluding current king
 
         // --- Canvas Setup ---
         canvas.width = GRID_WIDTH * CELL_SIZE;
@@ -412,19 +488,27 @@
         }
         function clearMessages() {
             errorMessageDiv.textContent = '';
-            // loadingStatusDiv.textContent = ''; // Keep loading status until done
         }
+        function updateKingDisplay() {
+            if (currentKing) {
+                kingInfoDiv.textContent = `Current King: ${currentKing.name} (Wins: ${currentKing.wins})`;
+            } else {
+                kingInfoDiv.textContent = "Current King: --- (Wins: 0)";
+            }
+        }
+
 
         // --- Pyodide Initialization ---
         async function initPyodide() {
             if (pyodide) return pyodide;
             isLoading = true;
-            startBattleBtn.disabled = true;
+            startTournamentBtn.disabled = true;
+            nextBattleBtn.disabled = true;
             showLoadingStatus("Loading Pyodide runtime...");
             try {
                 pyodide = await loadPyodide();
                 showLoadingStatus("Pyodide loaded. Loading Python game engine...");
-                await pyodide.loadPackage(["micropip"]); // If AIs use other packages, list them or use micropip
+                // No need to load micropip unless AIs use specific packages not bundled
                 await pyodide.runPythonAsync(PYTHON_ENGINE_CODE);
                 showLoadingStatus("Python game engine ready.");
                 return pyodide;
@@ -433,7 +517,7 @@
                 throw error;
             } finally {
                 isLoading = false;
-                startBattleBtn.disabled = false; // Re-enable if champions are loaded
+                // Button enabling will be handled after champion list load
             }
         }
 
@@ -441,17 +525,18 @@
         async function loadChampionsManifest() {
             showLoadingStatus("Fetching champion list...");
             try {
-                // Adjust path if your index.html is not at the root with past_champions folder
                 const response = await fetch('./past_champions/champions_manifest.json');
                 if (!response.ok) {
                     throw new Error(`Failed to fetch champions_manifest.json: ${response.statusText}`);
                 }
-                championsList = await response.json();
-                if (!championsList || championsList.length < 2) {
-                    showError("Not enough champions (need at least 2) in manifest or manifest is invalid.");
+                const rawList = await response.json();
+                if (!rawList || rawList.length < 1) { // Need at least 1 for a king, 2 for a battle
+                    showError("Not enough champions (need at least 1) in manifest or manifest is invalid.");
                     return false;
                 }
-                showLoadingStatus(`Found ${championsList.length} champions. Ready to battle!`);
+                // Store AI info, pyFunc will be loaded on demand
+                championsList = rawList.map(champ => ({ name: champ.name, file: champ.file, pyFunc: null, wins: 0 }));
+                showLoadingStatus(`Found ${championsList.length} champions. Ready for tournament!`);
                 return true;
             } catch (error) {
                 showError(`Error loading champions: ${error}`);
@@ -460,37 +545,41 @@
             }
         }
         
-        async function getAIFunction(aiInfo) {
+        async function loadAIFunctionIfNeeded(aiInfo) {
+            if (aiInfo.pyFunc) return aiInfo.pyFunc; // Already loaded
+
             showLoadingStatus(`Loading AI: ${aiInfo.name}...`);
             try {
                 const response = await fetch(`./past_champions/${aiInfo.file}`);
                 if (!response.ok) throw new Error(`Failed to fetch AI file ${aiInfo.file}: ${response.statusText}`);
                 const aiCode = await response.text();
                 
-                // Ensure Pyodide is ready and engine code (with load_ai_function_from_string) is loaded
                 if (!pyodide || !pyodide.globals.get('load_ai_function_from_string')) {
-                     await initPyodide(); // Try to init again if not ready
+                     await initPyodide(); 
                 }
-                if (!pyodide.globals.get('load_ai_function_from_string')){
+                const pyLoaderFunc = pyodide.globals.get('load_ai_function_from_string');
+                if (!pyLoaderFunc){
                     throw new Error("Python function 'load_ai_function_from_string' not available.");
                 }
 
-                const pyAIFunction = pyodide.globals.get('load_ai_function_from_string')(aiCode);
+                const pyAIFunction = pyLoaderFunc(aiCode);
                 if (!pyAIFunction) {
-                    throw new Error(`Could not load AI function from ${aiInfo.file}. Check Python console for details from load_ai_function_from_string.`);
+                    throw new Error(`Could not load AI function from ${aiInfo.file}. Check Python console.`);
                 }
+                aiInfo.pyFunc = pyAIFunction; // Cache it
                 showLoadingStatus(`AI ${aiInfo.name} loaded.`);
                 return pyAIFunction;
             } catch (error) {
                 showError(`Error loading AI ${aiInfo.name} (${aiInfo.file}): ${error}`);
-                throw error; // Re-throw to stop battle setup
+                throw error;
             }
         }
 
 
         // --- Drawing Functions ---
         function drawGrid() {
-            ctx.strokeStyle = GRID_COLOR;
+            ctx.strokeStyle = GRID_LINE_COLOR;
+            ctx.lineWidth = 0.5;
             for (let x = 0; x <= GRID_WIDTH; x++) {
                 ctx.beginPath();
                 ctx.moveTo(x * CELL_SIZE, 0);
@@ -505,56 +594,66 @@
             }
         }
 
-        function drawSnake(snake, color, headColor) {
-            if (!snake || !snake.is_alive || !snake.positions) return;
-            const positions = snake.positions.toJs ? snake.positions.toJs() : snake.positions; // Handle PyProxy
-
-            positions.forEach((pos, index) => {
-                const [x, y] = pos.toJs ? pos.toJs() : pos; // Handle PyProxy for individual positions
+        function drawSnake(snakeData, color, headColor) {
+            if (!snakeData || !snakeData.is_alive || !snakeData.positions) return;
+            // positions should already be a JS array from snake.to_dict()
+            snakeData.positions.forEach((pos, index) => {
+                const [x, y] = pos; 
                 ctx.fillStyle = (index === 0) ? headColor : color;
                 ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
-                ctx.strokeStyle = "#333"; // Segment outline
-                ctx.strokeRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                // Optional: add a slight border to segments
+                // ctx.strokeStyle = "rgba(0,0,0,0.2)"; 
+                // ctx.strokeRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
             });
         }
 
-        function drawFoods(foodsList) {
+        function drawFoods(foodsList) { // Expects array of [x,y] tuples
             if (!foodsList) return;
-            const foods = foodsList.toJs ? foodsList.toJs() : foodsList; // Handle PyProxy
-
-            foods.forEach(foodPos => {
-                const [x, y] = foodPos.toJs ? foodPos.toJs() : foodPos; // Handle PyProxy
+            foodsList.forEach(foodPos => {
+                const [x, y] = foodPos;
                 ctx.fillStyle = FOOD_COLOR;
                 ctx.beginPath();
-                ctx.arc(x * CELL_SIZE + CELL_SIZE / 2, y * CELL_SIZE + CELL_SIZE / 2, CELL_SIZE / 2.5, 0, 2 * Math.PI);
+                ctx.arc(x * CELL_SIZE + CELL_SIZE / 2, y * CELL_SIZE + CELL_SIZE / 2, CELL_SIZE / 2.8, 0, 2 * Math.PI);
                 ctx.fill();
-                ctx.strokeStyle = "#c69500"; // Food outline
-                ctx.stroke();
             });
         }
 
         function renderGame(gameState) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            drawGrid();
+            // drawGrid(); // Optional: Grid can make it look busy
 
             if (gameState.foods) {
                 drawFoods(gameState.foods);
             }
-            if (gameState.snake1) {
-                drawSnake(gameState.snake1, SNAKE_1_COLOR, SNAKE_1_HEAD_COLOR);
-            }
-            if (gameState.snake2) {
-                drawSnake(gameState.snake2, SNAKE_2_COLOR, SNAKE_2_HEAD_COLOR);
-            }
+            // Determine which snake is P1 (king/first player) and P2 (challenger) for consistent coloring
+            let p1SnakeData, p2SnakeData;
+            let p1DisplayName, p2DisplayName;
 
-            // Update scores and names
-            const s1Name = gameState.snake1 ? gameState.snake1.name : "P1";
-            const s2Name = gameState.snake2 ? gameState.snake2.name : "P2";
-            const s1Score = gameState.snake1 ? gameState.snake1.score : 0;
-            const s2Score = gameState.snake2 ? gameState.snake2.score : 0;
+            if (currentKing && gameState.snake1 && gameState.snake1.name === currentKing.name) {
+                p1SnakeData = gameState.snake1;
+                p2SnakeData = gameState.snake2;
+                p1DisplayName = currentKing.name;
+                p2DisplayName = currentChallenger ? currentChallenger.name : "Challenger";
+            } else if (currentKing && gameState.snake2 && gameState.snake2.name === currentKing.name) {
+                p1SnakeData = gameState.snake2; // King is snake2 in this game instance
+                p2SnakeData = gameState.snake1;
+                p1DisplayName = currentKing.name;
+                p2DisplayName = currentChallenger ? currentChallenger.name : "Challenger";
+            } else { // First game of tournament, or some other edge case
+                p1SnakeData = gameState.snake1;
+                p2SnakeData = gameState.snake2;
+                p1DisplayName = p1SnakeData ? p1SnakeData.name : "P1";
+                p2DisplayName = p2SnakeData ? p2SnakeData.name : "P2";
+            }
             
-            aiNamesDiv.innerHTML = `<span class="snake1-name">${s1Name}</span> vs <span class="snake2-name">${s2Name}</span>`;
-            scoresDiv.textContent = `Score: ${s1Name} (${s1Score}) - ${s2Name} (${s2Score})`;
+            if (p1SnakeData) drawSnake(p1SnakeData, SNAKE_1_COLOR, SNAKE_1_HEAD_COLOR);
+            if (p2SnakeData) drawSnake(p2SnakeData, SNAKE_2_COLOR, SNAKE_2_HEAD_COLOR);
+
+            const s1Score = p1SnakeData ? p1SnakeData.score : 0;
+            const s2Score = p2SnakeData ? p2SnakeData.score : 0;
+            
+            aiNamesDiv.innerHTML = `<span class="snake1-name-display">${p1DisplayName}</span> vs <span class="snake2-name-display">${p2DisplayName}</span>`;
+            scoresDiv.textContent = `Score: ${p1DisplayName} (${s1Score}) - ${p2DisplayName} (${s2Score})`;
             
             if (gameState.game_over) {
                 statusDiv.textContent = `Game Over! ${gameState.winner_message || "No winner determined."}`;
@@ -569,136 +668,171 @@
 
             try {
                 const rawState = pyGameEnv.run_step();
-                // Convert PyProxy to JS object, deeply.
                 const gameState = rawState.toJs({ dict_converter: Object.fromEntries, create_proxies: false }); 
-                rawState.destroy(); // Clean up proxy
+                rawState.destroy(); 
 
                 renderGame(gameState);
 
                 if (gameState.game_over) {
                     clearInterval(gameLoopInterval);
                     gameLoopInterval = null;
-                    startBattleBtn.disabled = false;
-                    showLoadingStatus("Battle ended. Ready for new battle!");
-                    console.log("Game Over:", gameState.winner_message);
+                    nextBattleBtn.disabled = false; // Enable for next battle
+                    startTournamentBtn.disabled = false; // Allow restarting tournament
+                    showLoadingStatus("Battle ended.");
+                    
+                    // Determine winner for tournament progression
+                    if (gameState.winner_name) {
+                        if (currentKing && gameState.winner_name === currentKing.name) {
+                            currentKing.wins++;
+                            statusDiv.textContent += ` ${currentKing.name} remains King!`;
+                        } else if (currentChallenger && gameState.winner_name === currentChallenger.name) {
+                            currentKing = currentChallenger; // New King!
+                            currentKing.wins = (currentKing.wins || 0) + 1; // Start/increment wins
+                            statusDiv.textContent += ` New King: ${currentKing.name}!`;
+                        } else { // Should not happen if names are consistent
+                             statusDiv.textContent += ` Winner: ${gameState.winner_name}. Tournament state unclear.`;
+                        }
+                    } else { // A draw
+                        statusDiv.textContent += " It's a draw! King remains.";
+                        // Optionally, king could lose crown on a draw, or challenger gets another try.
+                        // For simplicity, king stays.
+                    }
+                    updateKingDisplay();
                 }
             } catch (error) {
                 showError(`Error during game step: ${error}`);
-                console.error("Error in game step:", error);
                 clearInterval(gameLoopInterval);
                 gameLoopInterval = null;
-                startBattleBtn.disabled = false;
+                startTournamentBtn.disabled = false;
+                nextBattleBtn.disabled = true;
                 isLoading = false;
             }
         }
 
-        async function startBattle() {
+        async function setupAndStartBattle() {
             clearMessages();
             if (isLoading) {
                 showError("Still loading, please wait.");
                 return;
             }
-            if (gameLoopInterval) { // Stop previous game if any
+            if (gameLoopInterval) { 
                 clearInterval(gameLoopInterval);
                 gameLoopInterval = null;
             }
 
             isLoading = true;
-            startBattleBtn.disabled = true;
+            startTournamentBtn.disabled = true;
+            nextBattleBtn.disabled = true;
             statusDiv.textContent = "Setting up new battle...";
 
             try {
-                if (!pyodide) {
-                    await initPyodide();
-                }
+                if (!pyodide) await initPyodide();
                 if (championsList.length === 0) {
                     const manifestLoaded = await loadChampionsManifest();
-                    if (!manifestLoaded || championsList.length < 2) {
-                         showError("Cannot start battle: Not enough champions loaded. Check manifest.");
-                         isLoading = false;
-                         startBattleBtn.disabled = false;
-                         return;
+                    if (!manifestLoaded || championsList.length < 1) {
+                         showError("Cannot start: Not enough champions. Check manifest.");
+                         isLoading = false; startTournamentBtn.disabled = false; return;
                     }
                 }
 
-                // Select two different random AIs
-                let ai1Info, ai2Info;
-                let idx1 = Math.floor(Math.random() * championsList.length);
-                let idx2 = Math.floor(Math.random() * championsList.length);
-                while (idx2 === idx1) { // Ensure different AIs
-                    idx2 = Math.floor(Math.random() * championsList.length);
+                // Determine players for this battle
+                let player1AI, player2AI;
+                if (!currentKing) { // First battle of a tournament
+                    if (championsList.length < 2) {
+                        showError("Need at least 2 champions for the first battle.");
+                        isLoading = false; startTournamentBtn.disabled = false; return;
+                    }
+                    let idx1 = Math.floor(Math.random() * championsList.length);
+                    let idx2;
+                    do { idx2 = Math.floor(Math.random() * championsList.length); } while (idx1 === idx2);
+                    
+                    player1AI = championsList[idx1]; // This will become king if they win
+                    player2AI = championsList[idx2];
+                    currentChallenger = player2AI; // For display consistency
+                    // currentKing will be set after this battle if player1AI wins
+                } else { // King vs. Challenger
+                    player1AI = currentKing;
+                    availableChallengers = championsList.filter(c => c.name !== currentKing.name);
+                    if (availableChallengers.length === 0) {
+                        showError(`King ${currentKing.name} has defeated all challengers! Tournament ends.`);
+                        statusDiv.textContent = `King ${currentKing.name} is the Ultimate Champion!`;
+                        isLoading = false; startTournamentBtn.disabled = false; return;
+                    }
+                    player2AI = availableChallengers[Math.floor(Math.random() * availableChallengers.length)];
+                    currentChallenger = player2AI;
                 }
-                ai1Info = championsList[idx1];
-                ai2Info = championsList[idx2];
 
-                statusDiv.textContent = `Loading AIs: ${ai1Info.name} vs ${ai2Info.name}`;
-                const pyAI1Func = await getAIFunction(ai1Info);
-                const pyAI2Func = await getAIFunction(ai2Info);
+                statusDiv.textContent = `Loading AIs: ${player1AI.name} vs ${player2AI.name}`;
+                const pyAI1Func = await loadAIFunctionIfNeeded(player1AI);
+                const pyAI2Func = await loadAIFunctionIfNeeded(player2AI);
 
-                if (!pyAI1Func || !pyAI2Func) {
-                    throw new Error("One or both AI functions failed to load.");
-                }
+                if (!pyAI1Func || !pyAI2Func) throw new Error("One or both AI functions failed to load.");
                 
-                // Get SnakeEnvironment class from Pyodide
                 const PySnakeEnvironment = pyodide.globals.get('SnakeEnvironment');
-                if (!PySnakeEnvironment) {
-                    throw new Error("Python class 'SnakeEnvironment' not found. Engine might not have loaded correctly.");
-                }
+                if (!PySnakeEnvironment) throw new Error("Python class 'SnakeEnvironment' not found.");
 
-                // Create game environment in Python
-                // Pass initial_snake_length to the constructor
                 pyGameEnv = PySnakeEnvironment(
-                    GRID_WIDTH, GRID_HEIGHT, MAX_STEPS_PER_GAME,
+                    GRID_WIDTH, GRID_HEIGHT, INITIAL_SNAKE_LENGTH, MAX_STEPS_PER_GAME,
                     pyAI1Func, pyAI2Func,
-                    ai1Info.name, ai2Info.name,
-                    initialSnakeLength // Pass the length
+                    player1AI.name, player2AI.name
                 );
                 
-                // Initial render
                 const initialStateProxy = pyGameEnv.get_state();
                 const initialState = initialStateProxy.toJs({ dict_converter: Object.fromEntries, create_proxies: false });
                 initialStateProxy.destroy();
-                renderGame(initialState);
+                renderGame(initialState); // Render before loop starts
 
                 statusDiv.textContent = "Battle starting...";
                 gameLoopInterval = setInterval(gameStep, GAME_SPEED_MS);
 
             } catch (error) {
                 showError(`Failed to start battle: ${error}`);
-                console.error("Battle start error:", error);
                 statusDiv.textContent = "Error starting battle. See console.";
             } finally {
                 isLoading = false;
-                // Only re-enable button if game didn't start or already ended
-                if (!gameLoopInterval) startBattleBtn.disabled = false; 
+                // Buttons are re-enabled by gameStep when game_over, or if error here.
+                if (!gameLoopInterval) { // If setup failed before loop
+                    startTournamentBtn.disabled = false;
+                    nextBattleBtn.disabled = championsList.length < 2 || !currentKing;
+                }
             }
+        }
+        
+        function handleStartTournament() {
+            currentKing = null; // Reset king
+            currentChallenger = null;
+            championsList.forEach(c => { c.wins = 0; c.pyFunc = null; }); // Reset wins and cached funcs
+            updateKingDisplay();
+            setupAndStartBattle();
         }
 
         // --- Event Listeners ---
-        startBattleBtn.addEventListener('click', startBattle);
+        startTournamentBtn.addEventListener('click', handleStartTournament);
+        nextBattleBtn.addEventListener('click', setupAndStartBattle);
+
 
         // --- Initial Load ---
         async function main() {
             showLoadingStatus("Page loaded. Initializing...");
+            nextBattleBtn.disabled = true; // Disabled until a tournament is running
             try {
-                await initPyodide(); // Pre-load Pyodide and engine
-                await loadChampionsManifest(); // Pre-load champion list
-                if (championsList.length >= 2) {
-                    startBattleBtn.disabled = false;
-                    showLoadingStatus("Ready to start a battle!");
+                await initPyodide();
+                const manifestOK = await loadChampionsManifest();
+                if (manifestOK && championsList.length >= 1) { // Need at least 1 for a king, 2 for first battle
+                    startTournamentBtn.disabled = false;
+                    showLoadingStatus("Ready to start a tournament!");
                 } else {
-                    startBattleBtn.disabled = true;
-                    if (championsList.length > 0) { // if 1 champion
-                         showError("Need at least 2 champions in the manifest to battle.");
-                    } // Error for 0 champions already shown by loadChampionsManifest
+                    startTournamentBtn.disabled = true;
+                    if (!manifestOK) showError("Failed to load champion manifest. Cannot start.");
+                    else if (championsList.length < 1) showError("No champions found in manifest. Cannot start.");
                 }
             } catch (error) {
-                // Errors are already shown by initPyodide or loadChampionsManifest
-                startBattleBtn.disabled = true; // Keep disabled on critical init failure
+                startTournamentBtn.disabled = true;
             }
+            updateKingDisplay();
         }
 
-        main(); // Start the initialization process
+        main();
 
     </script>
 </body>
