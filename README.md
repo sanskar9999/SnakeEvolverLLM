@@ -1,3 +1,16 @@
+Okay, this is a neat project with two distinct but related parts! Here's a good short description and a comprehensive README for your "Snake AI King of the Hill."
+
+---
+
+### Short Description (for GitHub repo, etc.)
+
+Evolve and battle Snake AIs in this "King of the Hill" platform. Features a web viewer (Pyodide) for AI tournaments and a local Python framework with LLM (Groq) powered challenger generation.
+
+---
+
+### README.md
+
+```markdown
 # Snake AI: King of the Hill
 
 Evolve and battle Snake AIs in this "King of the Hill" platform. Features a web viewer (Pyodide) for AI tournaments and a local Python framework with LLM (Groq) powered challenger generation.
@@ -157,3 +170,69 @@ def get_challenger_action(my_snake, opponent_snake, foods, grid_width, grid_heig
     # Example: Simple random valid action
     chosen_action = random.choice(valid_actions)
     return chosen_action
+```
+
+**Key objects and attributes available to your AI (within `get_challenger_action`):**
+
+*   **`my_snake` (and `opponent_snake` if not None and alive):**
+    *   `positions`: `collections.deque` of `(x, y)` tuples (head is `my_snake.positions[0]`).
+    *   `direction_idx`: Current direction index (0:Up, 1:Right, 2:Down, 3:Left).
+    *   `length`: Integer length of the snake.
+    *   `score`: Integer score (typically food eaten).
+    *   `is_alive`: Boolean.
+    *   `get_head_position() -> Tuple[int, int]`: Returns `(x,y)` of the snake's head.
+    *   `get_valid_actions() -> List[int]`: Returns a list of valid action indices (prevents immediate 180-degree turns).
+    *   `DIRECTIONS_MAP`: Class attribute `Snake.DIRECTIONS_MAP` (also accessible via `my_snake.DIRECTIONS_MAP`) = `[(0, -1), (1, 0), (0, 1), (-1, 0)]`.
+    *   `ACTIONS_LIST`: Class attribute `Snake.ACTIONS_LIST` (also `my_snake.ACTIONS_LIST`) = `[0, 1, 2, 3]`.
+    *   `OPPOSITE_ACTIONS_MAP`: Class attribute `Snake.OPPOSITE_ACTIONS_MAP` (also `my_snake.OPPOSITE_ACTIONS_MAP`) = `{0: 2, 1: 3, 2: 0, 3: 1}`.
+    *   (Web version specifics) `grid_width`, `grid_height`: Available on the snake object itself for AIs that might need it.
+
+*   **`Food` object (in `foods` list):**
+    *   `position`: `Tuple[int, int]` representing the `(x, y)` coordinates of the food.
+
+*   **Grid Information:**
+    *   `grid_width`, `grid_height`: Passed directly as arguments.
+    *   The grid is toroidal (wraps around). (0,0) is the top-left corner.
+
+For the **local `main_snake_game.py`**, you typically place your AI code in `challenger_snake_logic.py`.
+For the **web version (`index.html`)**, you create separate Python files (e.g., `my_ai.py`) inside the `past_champions/` directory and list them in `past_champions/champions_manifest.json`.
+
+## File Structure
+
+```
+.
+├── index.html                  # Web-based tournament viewer
+├── main_snake_game.py          # Local Python AI competition script
+├── challenger_snake_logic.py   # Your manual/experimental AI for local competition
+├── best_snake_logic.py         # Current best AI (updated by main_snake_game.py)
+├── leaderboard.json            # Stores top AI rankings (for local competition)
+├── past_champions/             # Directory for archived champion AIs & web manifest
+│   ├── champions_manifest.json # Manifest for web viewer AIs
+│   ├── some_champion_ai.py     # Example AI file for web viewer / archived champion
+│   └── ...
+└── README.md                   # This file
+```
+
+## LLM-Powered AI Generation Notes
+
+*   The LLM (Groq) is prompted to generate the `get_challenger_action` function.
+*   It receives the game rules, snake API, game constants, and the code of the current `best_snake_logic.py` to try and improve upon it.
+*   The quality of generated AIs can vary. Sometimes they are very good, other times they might have bugs or suboptimal strategies. This is part of the experiment!
+*   Ensure your Groq API key is kept secret and preferably set as an environment variable.
+
+## Future Ideas / Contributing
+
+*   More sophisticated AI evaluation metrics.
+*   Web interface for submitting AIs.
+*   Support for different LLM providers.
+*   Enhanced visualization and game analytics.
+*   Community leaderboard online.
+
+Contributions, bug reports, and feature requests are welcome! Please open an issue or submit a pull request.
+
+## License
+
+(Specify your license here, e.g., MIT License. If none, you can state "This project is currently unlicensed." or remove this section.)
+
+This project is currently unlicensed. Feel free to use it, but there are no explicit permissions granted for distribution or modification for other purposes.
+```
